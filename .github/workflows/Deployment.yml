@@ -1,0 +1,53 @@
+---
+name: apps deployment
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "target environment name"
+        required: true
+      destroy:
+        description: "Destroy the resource"
+        required: false
+        default: false
+jobs:
+  deploy_source:
+    name: apps
+    runs-on: ubuntu-latest
+    env:
+      CN: dev
+    steps:
+      - name: checkout
+        uses: actions/checkout@v1
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.SECRET_KEY }}
+          aws-region: eu-central-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: 773342935443.dkr.ecr.eu-central-1.amazonaws.com/devops-cluster-dev:latest
+      - name: kubernetes credentials download
+        run: aws eks --region eu-central-1 update-kubeconfig --name devops-cluster-dev
+      - uses: azure/setup-kubectl@v1
+        with:
+          version: latest
+        id: install
+      - name: apply
+        run: kubectl apply -f kubes.yml
+      - name: pods and services
+        run: kubectl get pod,svc
+      - name: delete
+        if: github.event.inputs.destroy == 'true'
+        run: kubectl delete	-f kubes.yml
